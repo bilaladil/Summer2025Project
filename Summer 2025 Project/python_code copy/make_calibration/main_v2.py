@@ -124,7 +124,7 @@ def select_swp_mkt_data(date_tmp, df_swp_mkt_data):
     date_tmp_ = datetime.strptime(date_tmp, '%d/%m/%Y')
 
     #print(df_swp_mkt_data.head())
-    #FQ(66)
+    #FQ(66) 
     idx_date = df_swp_mkt_data['DATES']==date_tmp_
     idx_exp  = df_swp_mkt_data['DATES']=='EXPIRY'
     idx_mat  = df_swp_mkt_data['DATES']=='MATURITY'
