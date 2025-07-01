@@ -520,15 +520,17 @@ def set_mkt_price_df(df_swp_data, shift_data, rf_curve_dict):
     return  df_swp_data_n
 
 
+
+#this means that the following code will only run in this file
 if __name__ == '__main__':
 
 
-    mdl_list = ['LMM', 'VSCK', 'CIR1++']
+    mdl_list = ['LMM', 'VSCK', 'CIR1++'] #list of interest rate models
 
     #mdl_list = ['LMM', 'VSCK', 'CIR1++']
     calib_type = 'Standard'
-    flag_plot = True
-    flag_save = True # save the plot
+    flag_plot = False # plot yes or no
+    flag_save = False # save the plot yes or no
 
     w_limit_min = 2019
     w_limit_max = 2023
@@ -537,10 +539,7 @@ if __name__ == '__main__':
     #label_out = "17_18_19"
     label_out = "20_21_22"
 
-
-
-    t0 = time.time()
-
+    t0 = time.time() #starts a timer
 
     #w_limit_min = 20.5 #19.5
     #w_limit_max = 21.5 #20.5
@@ -549,26 +548,23 @@ if __name__ == '__main__':
     flag_exp = False
     #flag_exp = True
 
-    # LOSS FUNCTIONS vedi Brigo pg. 60 e 77
-    # CHK BLACK: prima setto STRIKE = FWD, dopo alzo il fwd con lo shift FWD = FWD + shift??
-    # GESTIONE DELLA CURVA (i.e. PP) PER I MODELLI PP
+    # LOSS FUNCTIONS see Brigo pg. 60 and 77
+    # CHK BLACK: first I set STRIKE = FWD, then I raise the fwd with the shift FWD = FWD + shift??
+    # CURVE MANAGEMENT (i.e. PP) FOR PP MODELS
     # LOSS FUNCTIONS
 
-
-
+#pulling data from an excel sheet
     rf_mkt_curves =     pd.read_excel(open('make_calibration2/input/dati_swaptions_v12.xlsx', 'rb'), sheet_name='CURVES')
     swp_mkt_data =      pd.read_excel(open('make_calibration2/input/dati_swaptions_v12.xlsx', 'rb'), sheet_name='SWAPTIONS_DATA')
     shift_mkt_data_1 =  pd.read_excel(open('input/dati_swaptions_v12.xlsx', 'rb'), sheet_name='SHIFT_DATA_1')
     mdl_prms_data =     pd.read_excel(open('input/dati_swaptions_v12.xlsx', 'rb'), sheet_name='MDL_DATA')
     ptf_swp_dataset =   pd.read_excel(open('input/dati_swaptions_v12.xlsx', 'rb'), sheet_name='PTF_DATA_N')
 
-
-
-
     w_limit = w_limit_min
 
-
+#we want only the portfolios whose weight values fall within our bounds
     idx_ = (ptf_swp_dataset['WEIGHT'] > w_limit_min) & (ptf_swp_dataset['WEIGHT'] < w_limit_max)
+#creates a list of all the portfolio names who fall within our bounds
     ptf_label_list = ptf_swp_dataset[idx_]['PTF_LABEL'].tolist()
 
     ptf_label_list = list(set(ptf_label_list))
@@ -581,22 +577,25 @@ if __name__ == '__main__':
     calib_type_for_report = []
     calib_label_for_report = []
 
-
     k = 1
 
     n_ptf = len(ptf_label_list)
+#prints the number of suitable portfolios
     print('len(ptf_label_list): ', len(ptf_label_list))
     j = 1
     for ptf_label_tmp in ptf_label_list:
 
+#prints what number portfolio we are on out of the total amount of suitable ones
         print('N. ptf elab: %s over %s' %(j,n_ptf))
         j = j + 1
         #print('len(ptf_label_tmp): ', len(ptf_label_tmp))
+#prints the relevant portfolio name
         print('ptf_label_tmp: ', ptf_label_tmp)
         #FQ(77)
+#takes the date on the portfolio label
         xx = ptf_label_tmp.split('_')[0]
         ln = len(xx)
-
+#splits the date year, month, day
         yy = ptf_label_tmp[ln-8:ln-4]
         mm = ptf_label_tmp[ln-4:ln-2]
         dd = ptf_label_tmp[ln-2:ln]
@@ -604,39 +603,48 @@ if __name__ == '__main__':
 
         date_tmp = dd + '/' + mm + '/' + yy
 
+#selects the risk free curve data, swaption volatility data and swaption shift data on the specified date
         rf_curve_dict = select_rf_curve(date_tmp, rf_mkt_curves)
         swp_vols = select_swp_mkt_data(date_tmp, swp_mkt_data)
         swp_shift = select_swp_mkt_data(date_tmp, shift_mkt_data_1)
 
         date_str_tmp = to_date_str(date_tmp)
 
+#picks the swaption data to calibrate by filtering using the label 
         swp_data_to_calib = select_swp_ptf(ptf_label_tmp, ptf_swp_dataset)
 
+#extracting relevant shift and volatilities
         shift_data        = select_data_to_calib(swp_shift, swp_data_to_calib, flag_exp, w_limit_min,w_limit_max )
         swp_data          = select_data_to_calib(swp_vols, swp_data_to_calib, flag_exp, w_limit_min, w_limit_max)
 
+#creating a dictionary and dataframe of market price data 
         mkt_price_dict    = set_mkt_price_dict(swp_data, shift_data, rf_curve_dict)
         mkt_price_df      = set_mkt_price_df(swp_data, shift_data, rf_curve_dict)
 
 
         for mdl_label_tmp in mdl_list:
 
+#shifting forward rates to avoid negatives
             shift_mean = np.asarray(shift_data['VALUES'].to_list()).mean()
-
             shift_ref = shift_mean/100.0
+            
+#printing evaluation number, model name, portfolio name and date
             print('n. eval: ', k, ', mdl: ', mdl_label_tmp, ', ptf: ', ptf_label_tmp, ', date: ', date_tmp)
+#loading market data and calibrating our model parameters
             prm_data_dict, df_mdl_prms = select_model_prms_data(mdl_label_tmp, mdl_prms_data)
             mdl_prm_opt = model_calibration(mkt_price_dict, rf_curve_dict, mdl_label_tmp, prm_data_dict, shift_ref)
 
 
-            t1 = time.time()
+            t1 = time.time() #ends the timer and prints the time taken
             print('%.2f s.'%(t1-t0))
 
+#computes model price using the calibrated parameters and computes the chi squared value
             df_model_data, chi2_tmp = set_mdl_calib_results(mkt_price_df, rf_curve_dict, mdl_label_tmp, shift_ref, mdl_prm_opt)
+#optional plotting           
             report_f.make_plot(df_model_data, ptf_label_tmp, mdl_label_tmp, date_str_tmp, flag_exp, flag_plot, flag_save)
             report_f.dump_report(df_model_data, mdl_prm_opt, df_mdl_prms, ptf_label_tmp, mdl_label_tmp, date_str_tmp, shift_ref)
 
-
+#saving data to output
             date_for_report.append(date_tmp)
             ptf_for_report.append(ptf_label_tmp)
             mdl_for_report.append(mdl_label_tmp)
