@@ -133,7 +133,7 @@ def make_plot(df_mdl_data, ptf_label, mdl_label, date_label, flag_exp, flag_plot
 
 def dump_report(df_calib_data, dict_opt_prms, df_prms, ptf_label, mdl_out, date_label, shift_ref):
 
-    file_out = 'output/' + mdl_out + ptf_label + '_' + date_label + '.txt'
+    file_out = 'make_calibration2/output/' + mdl_out + ptf_label + '_' + date_label + '.txt'
     x2_out = computeCHI2(df_calib_data)
 
     fout = open(file_out, "w")
