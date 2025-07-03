@@ -51,7 +51,7 @@ def CurveFromDictToList(rf_Curve):
 	rf_times.sort()
 	rf_values = []
 
-	for j in xrange(0, len(rf_times)):
+	for j in range(0, len(rf_times)):
 		rf_values.append(rf_Curve[rf_times[j]])
 	return np.array(rf_times), np.array(rf_values)
 
@@ -84,7 +84,7 @@ def LMM_IntVol_jk_dt(param, t0, t1, t_k, t_j):
 
 
 	tmp00 = 1. / (4. * np.power(c, 3))
-	tmp01 = np.exp(-c * (t_j + t_k))
+	tmp01 = np.exp(-c * (t_j + t_k)) 
 
 	tmp101 = - np.exp(2. * c * t0) * (1. + c * (t_j + t_k - 2. * t0) + 2. * np.power(c,2.) * (t_j - t0) *(t_k - t0))
 	tmp102 = np.exp(2. * c * t1) * (1. + c * (t_j + t_k - 2. * t1) + 2. * np.power(c,2.) * (t_j - t1) *(t_k - t1))
