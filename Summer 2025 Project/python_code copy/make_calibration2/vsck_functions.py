@@ -151,7 +151,7 @@ def ComputeEuropeanSwaptionPrice(cp, times, coupons, r_0, theta, sigma, k, T, t)
 
 #the first step is to simulate values for the short rate, r, using the Vasicek dynamics
 
-def VasicekShortRateSimulations(r_0, nr, n, k, T, t, theta, sigma):
+def VasicekShortRateSimulations(r_0, nr, n, k, theta, sigma, T, t):
     
     dt = (T - t)/n
     
@@ -169,10 +169,108 @@ def VasicekShortRateSimulations(r_0, nr, n, k, T, t, theta, sigma):
     return r_val
 
 
-def ComputeBermudanSwaptionPrice(cp, nr, n):
+def ComputeTargetContValues(cp, nr, n, times, coupons, r_0, k, theta, sigma, T, t):
     
-    TargetContVal = np.zeros((nr,n+1))
-    TargetContVal[:,-1] = ComputeEuropeanSwaptionPrice(cp, times, coupons, r_val[:, -1], theta, sigma, k, T, t)
+    dt = (T - t)/n
+    
+    r_val = VasicekShortRateSimulations(r_0, nr, n, k, theta, sigma, T, 0)
+    
+    TargetContVal = np.zeros((nr, n+1))
+    
+    for i in range(nr):
+        TargetContVal[i, -1] = ComputeEuropeanSwaptionPrice(cp, times, coupons, r_val[i, -1], theta, sigma, k, T, T)
+    
+    for i in range(nr):
+        for j in range(n-1,0,-1):
+            TargetContVal[i,j] = np.exp(- r_val[i,j] * dt) * TargetContVal[i,j+1] 
+    
+    return TargetContVal
+             
+            
+def ComputeEarlyExerciseValues(cp, nr, n, times, coupons, r_0, k, theta, sigma, T, t):
+    
+    dt = (T - t)/n
+    
+    r_val = VasicekShortRateSimulations(r_0, nr, n, k, theta, sigma, T, 0)
+    
+    EarlyExerciseVal = np.zeros((nr, n+1))
+    
+    for i in range(nr):
+        EarlyExerciseVal[i, -1] = ComputeEuropeanSwaptionPrice(cp, times, coupons, r_val[i, -1], theta, sigma, k, T, T)
+
+    for i in range(nr):
+        for j in range(n-1,0,-1):
+            currenttime = j * dt
+            EarlyExerciseVal[i,j] = ComputeEuropeanSwaptionPrice(cp, times, coupons, r_val[i,j], theta, sigma, k, T, currenttime) 
+        
+    return EarlyExerciseVal
+
+
+
+def ComputeLLSContValues():
+
+    #need to find swap rates to see when the swaption is ITM
+    #use this from main_v2 lines 364 - 401
+    
+    """#this function calculates the strike (par swap rate) for a swap that starts in t_exp years
+    #with a tenor of t_tenor using rf_curve (zero coupon rates)
+    def compute_swp_strike(t_exp, t_tenor, rf_curve):
+     
+
+        t_mat = t_exp + t_tenor
+        time_ts    = rf_curve['TIME']
+        zc_rates   = rf_curve['VALUE']
+
+    #interpolates along rf_curve to find the zc rate at expiry and maturity
+        zc_exp_rates = np.interp(t_exp, time_ts, zc_rates)
+        zc_mat_rates = np.interp(t_mat, time_ts, zc_rates)
+
+    #converts the interpolated rates to discount factors
+        z_exp = np.exp(-zc_exp_rates*t_exp)
+        z_mat = np.exp(-zc_mat_rates*t_mat)
+
+        dt_pay = 0.5
+        n_pay = (t_mat - t_exp)/dt_pay
+        n_pay = int(np.round(n_pay,1))
+
+        annuity = 0.0
+        
+        for i in range(1, n_pay + 1):
+    #calculates the present value of the fixed leg of payments
+            t_tmp  = t_exp + i*dt_pay
+            zc_rate_tmp = np.interp(t_tmp, time_ts, zc_rates)
+            zc_price_tmp = np.exp(-t_tmp*zc_rate_tmp)
+            annuity = zc_price_tmp*dt_pay + annuity
+
+    #calculates the present value of the floating leg of payments 
+        num = z_exp - z_mat # present value of floating leg
+        
+        den = annuity #present value of fixed leg
+        
+        swap = num/den #par swap rate = present value of floating / present value of fixed
+
+        return swap"""
+    
+
+
+def ComputeBermudanSwaptionPrice(cp, nr, n, times, coupons, r_0, k, theta, sigma, T, t ):
+    
+    dt = (T - t)/n
+    
+    r_val = VasicekShortRateSimulations(r_0, nr, n, k, theta, sigma, T, t)
+    T
+    
+    
+               
+  
+    
+    
+    
+    
+    
+    
+    
+    
     
     
 
