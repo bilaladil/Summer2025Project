@@ -2,6 +2,8 @@
 import numpy as np
 import scipy 
 
+#throughout this code, t is the time at which we are valuing and T is the option expiry
+
 #we know that swaptions can be expressed as a portfolio of zero coupon bonds paying c_i at T_i
 
 #we start by writing a function to compute the price of zero coupon bonds under the Vasicek model
@@ -18,7 +20,9 @@ def ZCB_price(r, theta, sigma, k, T, t):
 
 #we compute the present value of the fixed leg of the swaption and then use Jamshidian's trick to find
 #rstar when this equals the sum of ZCBs
-def ComputeSwapPV(times, coupons, ZCBprices):
+def ComputeSwapPV(times, coupons, r_0, theta, sigma, k, t):
+    
+    ZCBprices = ComputeZCBPrices(times, r_0, theta, sigma, k, t)
     
     if len(times) == len(coupons):
         
@@ -28,7 +32,6 @@ def ComputeSwapPV(times, coupons, ZCBprices):
         for i in range(0, n):
             swapPV += coupons[i] * ZCBprices[i]
         
-    
         return swapPV
     
     else:
@@ -90,7 +93,7 @@ def ComputeZCBPrices(times, r_0, theta, sigma, k, t):
     ZCBprices = []
     
     for T_i in times:
-        A, B, ZCB = ZCB_price(r_0, theta, sigma, k, T_i, t)
+        ZCB = ZCB_price(r_0, theta, sigma, k, T_i, t)[2]
         ZCBprices.append(ZCB)
         
     return ZCBprices
@@ -103,7 +106,7 @@ def ComputeStrikePrices(times, rstar, theta, sigma, k, T):
     strikeprices = []
     
     for T_i in times:
-        A, B, K = ZCB_price(rstar, theta, sigma, k, T_i, T)
+        K = ZCB_price(rstar, theta, sigma, k, T_i, T)[2]
         strikeprices.append(K)
         
     return strikeprices
@@ -111,17 +114,14 @@ def ComputeStrikePrices(times, rstar, theta, sigma, k, T):
 
 def ComputeEuropeanSwaptionPrice(cp, times, coupons, r_0, theta, sigma, k, T, t): 
     
-    ZCBprices_at0 = ComputeZCBPrices(times, r_0, theta, sigma, k, 0)
     ZCBprices_atT = ComputeZCBPrices(times, r_0, theta, sigma, k, T)
-    
     Avalues, Bvalues = ComputeABValues(times, coupons, r_0, theta, sigma, k, t) 
-    
-    swapPV = ComputeSwapPV(times, coupons, ZCBprices_at0) 
+    swapPV = ComputeSwapPV(times, coupons, r_0, theta, sigma, k, 0) 
     
     def f1(r):
-        return f(r_0, coupons, Avalues, Bvalues, swapPV)
+        return f(r, coupons, Avalues, Bvalues, swapPV)
     def fprime1(r):
-        return fprime(r_0, coupons, Avalues, Bvalues)
+        return fprime(r, coupons, Avalues, Bvalues)
 
     rstar = JamshidiansTrick(f1, r_0, fprime1)
 
@@ -132,10 +132,10 @@ def ComputeEuropeanSwaptionPrice(cp, times, coupons, r_0, theta, sigma, k, T, t)
         n = len(coupons)    
         runningsum = 0
         
-        if cp == 1: #call
+        if cp == 1: #payer
             for i in range(0,n):
                 runningsum += coupons[i] * max(ZCBprices_atT[i] - strikeprices[i] , 0)
-        elif cp == -1: #put
+        elif cp == -1: #receiver
             for i in range(0,n):
                 runningsum += coupons[i] * max(strikeprices[i] - ZCBprices_atT[i] , 0)
          
@@ -206,75 +206,114 @@ def ComputeEarlyExerciseValues(cp, nr, n, times, coupons, r_0, k, theta, sigma, 
     return EarlyExerciseVal
 
 
-
-def ComputeLLSContValues():
-
-    #need to find swap rates to see when the swaption is ITM
-    #use this from main_v2 lines 364 - 401
+def ComputeSwapRates(times, coupons, r_0, k, theta, sigma, t, exercisedates, lifetime):
+    #swap rate = present value of floating leg / present value of fixed leg
+    swaprates = []
     
-    """#this function calculates the strike (par swap rate) for a swap that starts in t_exp years
-    #with a tenor of t_tenor using rf_curve (zero coupon rates)
-    def compute_swp_strike(t_exp, t_tenor, rf_curve):
-     
-
-        t_mat = t_exp + t_tenor
-        time_ts    = rf_curve['TIME']
-        zc_rates   = rf_curve['VALUE']
-
-    #interpolates along rf_curve to find the zc rate at expiry and maturity
-        zc_exp_rates = np.interp(t_exp, time_ts, zc_rates)
-        zc_mat_rates = np.interp(t_mat, time_ts, zc_rates)
-
-    #converts the interpolated rates to discount factors
-        z_exp = np.exp(-zc_exp_rates*t_exp)
-        z_mat = np.exp(-zc_mat_rates*t_mat)
-
-        dt_pay = 0.5
-        n_pay = (t_mat - t_exp)/dt_pay
-        n_pay = int(np.round(n_pay,1))
-
-        annuity = 0.0
+    lifetime = float(lifetime)
+    for e in exercisedates:
+        e = float(e)
+        shiftedtimes = []
+        for t_i in times:
+            t_i = t_i + e
+            shiftedtimes.append(t_i)
         
-        for i in range(1, n_pay + 1):
-    #calculates the present value of the fixed leg of payments
-            t_tmp  = t_exp + i*dt_pay
-            zc_rate_tmp = np.interp(t_tmp, time_ts, zc_rates)
-            zc_price_tmp = np.exp(-t_tmp*zc_rate_tmp)
-            annuity = zc_price_tmp*dt_pay + annuity
-
-    #calculates the present value of the floating leg of payments 
-        num = z_exp - z_mat # present value of floating leg
+        fixedleg = ComputeSwapPV(shiftedtimes, coupons, r_0, theta, sigma, k, e)
         
-        den = annuity #present value of fixed leg
+        ZCBstart = ZCB_price(r_0, theta, sigma, k, e, t)[2]
+        ZCBend = ZCB_price(r_0, theta, sigma, k, (e + lifetime), t)[2]
         
-        swap = num/den #par swap rate = present value of floating / present value of fixed
+        floatingleg = ZCBstart - ZCBend
+        
+        swaprate = floatingleg / fixedleg
+        swaprates.append(swaprate)
+        
+    return swaprates
 
-        return swap"""
+
+def ComputeLLSContValue(cp, nr, n, times, coupons, r_0, k, theta, sigma, T, t, exercisedates, lifetime):
+
+    r_val = VasicekShortRateSimulations(r_0, nr, n, k, theta, sigma, T, t)
+    swaprates = ComputeSwapRates(times, coupons, r_0, k, theta, sigma, t, exercisedates, lifetime)
+    TargetContVal = ComputeTargetContValues(cp, nr, n, times, coupons, r_0, k, theta, sigma, T, t)
     
-
-
-def ComputeBermudanSwaptionPrice(cp, nr, n, times, coupons, r_0, k, theta, sigma, T, t ):
+    LLSContVal = np.zeros((nr,n+1))
     
-    dt = (T - t)/n
+    for j in range(n-1, 0, -1):
+        if cp == 1: #payer
+           
+            itmpaths = r_val[:, j] > swaprates[j]
+            
+            xvals = r_val[itmpaths, j]
+            yvals = TargetContVal[itmpaths, j]
+                        
+        elif cp == -1: #receiver
+    
+            itmpaths = r_val[:, j] < swaprates[j]
+            
+            xvals = r_val[itmpaths, j]
+            yvals = TargetContVal[itmpaths, j] 
+        
+        if len(xvals) > 0:
+            coefficients = np.polyfit(xvals, yvals, 2)
+            LLSContVal[itmpaths, j] = np.maximum(0, np.polyval(coefficients, r_val[itmpaths, j]))
+            
+        else:
+            LLSContVal[:, j] = 0                
+            print("This path is not ITM.")
+                 
+    return LLSContVal                  
+
+
+#next step is to compare continuation values and early exercise values
+    
+def ComputeBermudanSwaptionPrice(cp, nr, n, times, coupons, r_0, k, theta, sigma, T, t, exercisedates, lifetime):
+    
+    dt = (T - t) / n
     
     r_val = VasicekShortRateSimulations(r_0, nr, n, k, theta, sigma, T, t)
-    T
+    EarlyExerciseVal = ComputeEarlyExerciseValues(cp, nr, n, times, coupons, r_0, k, theta, sigma, T, t)
+    LLSContVal = ComputeLLSContValue(cp, nr, n, times, coupons, r_0, k, theta, sigma, T, t, exercisedates, lifetime)
+    
+    BermudanOptionVal = np.zeros((nr, n+1))
+    
+    for i in range(nr):
+         for j in range(n-1,0,-1):
+             if EarlyExerciseVal[i,j] > LLSContVal[i,j]:
+                 BermudanOptionVal[i,j] = EarlyExerciseVal[i,j]
+                 BermudanOptionVal[i,j+1:] = 0
+                 
+             elif LLSContVal[i,j] >= EarlyExerciseVal[i,j]:
+                 BermudanOptionVal[i,j] = LLSContVal[i,j]
+                 
+         BermudanOptionVal[i,0] = np.exp(- r_val[i,0] * dt) * BermudanOptionVal[i,1] 
     
     
-               
-  
+    price = np.mean(BermudanOptionVal[:,0])
+    std = np.std(BermudanOptionVal[:,0])
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    return price, std
 
 
+
+if __name__ == '__main__':
+    
+    times = [1, 2, 3, 4, 5]
+    coupons = [0.02, 0.02, 0.02, 0.02, 1.02]
+    r_0 = 0.03
+    theta = 0.05
+    sigma = 0.01
+    k = 0.15
+    T = 1
+    t = 0
+    cp = 1  # payer
+    nr = 10
+    exercisedates = [1, 2, 3]
+    n = len(exercisedates)
+    lifetime = 2
+    
+    price, std = ComputeBermudanSwaptionPrice(cp, nr, n, times, coupons, r_0, k, theta, sigma, T, t, exercisedates, lifetime)
+    print("Bermudan swaption price:", price, "std:", std)
 
 
 

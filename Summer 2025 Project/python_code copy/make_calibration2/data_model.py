@@ -10,4 +10,3 @@ cir1pp_prm_list = ['kappa', 'theta', 'sigma', 'r0']
 g2pp_prm_list   = ['alfa1', 'sigma1', 'alfa2', 'sigma2', 'rho']
 g1pp_prm_list   = ['alfa', 'sigma']
 lmm_prm_list    = ['a', 'b', 'c', 'd', 'beta', 'rho']
-
