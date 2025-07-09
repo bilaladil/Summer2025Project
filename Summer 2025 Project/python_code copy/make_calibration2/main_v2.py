@@ -11,7 +11,7 @@ import opt_functions as opt_f
 import report_functions as report_f
 import lmm_functions as lmm_f
 import data_model as dm
-import vsck_functions as vs
+import vsck_functions_adapted as vs
 
 
 
@@ -565,7 +565,7 @@ if __name__ == '__main__':
     mdl_prms_data =     pd.read_excel(open('make_calibration2/input/dati_swaptions_v12.xlsx', 'rb'), sheet_name='MDL_DATA')
     ptf_swp_dataset =   pd.read_excel(open('make_calibration2/input/dati_swaptions_v12.xlsx', 'rb'), sheet_name='PTF_DATA_N')
 
-    w_limit = w_limit_min
+    w_limit = w_limit_min 
 
 #we want only the portfolios whose weight values fall within our bounds
     idx_ = (ptf_swp_dataset['WEIGHT'] > w_limit_min) & (ptf_swp_dataset['WEIGHT'] < w_limit_max)

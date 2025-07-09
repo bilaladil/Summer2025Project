@@ -2,7 +2,7 @@
 import numpy as np
 import lmm_functions as lmm_f
 import sys
-
+import vsck_functions_adapted as vs
 
 
 
@@ -111,11 +111,28 @@ def compute_swaptions_price_by_lmm(list_model_params, strike_tmp, exp_tmp, mat_t
     #print('shift: ', shift)
     #print('mdl_value: ', mdl_value)
     #FQ(666)
-    return mdl_value
+    return mdl_value 
 
 def compute_swaptions_price_by_vsck(list_model_params, strike_tmp, exp_tmp, mat_tmp):
+    
+    k = list_model_params[0] 
+    theta = list_model_params[1]
+    sigma = list_model_params[2]
+    r_0 = list_model_params[3]
+    
+    tenor = 0.5
+    
+    times = np.arange(tenor, mat_tmp + tenor, tenor)
+    times = times.tolist()
+    
+    coupon = strike_tmp * tenor
+    coupons = []
+    while len(coupons) < len(times):
+        coupons.append(coupon)
+    coupons[-1] += 1
 
-    mdl_value  = compute_swaptions_price_test(list_model_params, strike_tmp, exp_tmp, mat_tmp)
+    #mdl_value  = compute_swaptions_price_test(list_model_params, strike_tmp, exp_tmp, mat_tmp)
+    mdl_value = vs.ComputeBermudanSwaptionPrice(cp, 1000, n, times, coupons, r_0, theta, sigma, k, exp_tmp, 0, exercisedates, mat_tmp)
 
     return mdl_value
 

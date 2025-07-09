@@ -219,7 +219,7 @@ def fromVolaATMToPrice(t_exp, maturity, tenor, vol, rf_times,rf_values, shift, c
 
 	price = ForwardAnnuityPrice * call
 
-	return price
+	return price 
 
 
 # ---------- Funzione di calcolo norma da ottimizzare nel caso ATM ------------------------------------
