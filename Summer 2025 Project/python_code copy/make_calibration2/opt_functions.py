@@ -137,10 +137,8 @@ def compute_swaptions_price_by_vsck(list_model_params, strike_tmp, exp_tmp, mat_
     #mdl_value  = compute_swaptions_price_test(list_model_params, strike_tmp, exp_tmp, mat_tmp)
     mdl_value = vs.ComputeBermudanSwaptionPrice(cp, nr, n, times, coupons, r_0, theta, sigma, k, exp_tmp, 0, exercisedates, mat_tmp)[0]
 
- 
-    epsilon = 1e-8
-    if mdl_value < epsilon:
-        mdl_value = epsilon
+    if mdl_value < 1e-8:
+        mdl_value = 1e-8
 
     return mdl_value
 
