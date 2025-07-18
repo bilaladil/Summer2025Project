@@ -115,12 +115,12 @@ def compute_swaptions_price_by_lmm(list_model_params, strike_tmp, exp_tmp, mat_t
 
 def compute_swaptions_price_by_vsck(list_model_params, strike_tmp, exp_tmp, mat_tmp):
     
-    k = list_model_params[0] 
-    theta = list_model_params[1]
-    sigma = list_model_params[2]
-    r_0 = list_model_params[3]
-    
+    #k, theta, sigma, r_0 = list_model_params
+    k, theta, sigma, r_0 = 0.1, 0.03, 0.001, 0.01
+
     tenor = 0.5
+    cp = 1
+    nr = 10
     
     times = np.arange(tenor, mat_tmp + tenor, tenor)
     times = times.tolist()
@@ -130,9 +130,17 @@ def compute_swaptions_price_by_vsck(list_model_params, strike_tmp, exp_tmp, mat_
     while len(coupons) < len(times):
         coupons.append(coupon)
     coupons[-1] += 1
-
+    
+    exercisedates = times
+    n = len(exercisedates)
+    
     #mdl_value  = compute_swaptions_price_test(list_model_params, strike_tmp, exp_tmp, mat_tmp)
-    mdl_value = vs.ComputeBermudanSwaptionPrice(cp, 1000, n, times, coupons, r_0, theta, sigma, k, exp_tmp, 0, exercisedates, mat_tmp)
+    mdl_value = vs.ComputeBermudanSwaptionPrice(cp, nr, n, times, coupons, r_0, theta, sigma, k, exp_tmp, 0, exercisedates, mat_tmp)[0]
+
+ 
+    epsilon = 1e-8
+    if mdl_value < epsilon:
+        mdl_value = epsilon
 
     return mdl_value
 

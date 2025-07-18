@@ -1,12 +1,12 @@
 #Code for using the Vasicek model to price swaptions
 import numpy as np
-import scipy 
-import pandas as pd
+from scipy.optimize import newton
 
 #throughout this code, t is the time at which we are valuing and T is the option expiry
 
-#swap maturities {1Y, 2Y, 3Y,..., 10Y, 15Y, 20Y, 25Y, 30Y}
 #option expiries {1M, 2M, 3M, 6M, 9M, 1Y, 18M, 2Y, 3Y, 4Y, 5Y, 7Y, 10Y, 15Y, 20Y, 25Y, 30Y}
+#swap maturities {1Y, 2Y, 3Y,..., 10Y, 15Y, 20Y, 25Y, 30Y}
+
  
 
 #things to change:
@@ -29,8 +29,6 @@ def ZCB_price(r, theta, sigma, k, T, t):
  
 #we want to use Jamshidians trick to find rstar when sum of ci * ZCB price = K
 
-#we compute the present value of the fixed leg of the swaption and then use Jamshidian's trick to find
-#rstar when this equals the sum of ZCBs
 def ComputeSwapPV(times, coupons, r_0, theta, sigma, k, t):
     
     ZCBprices = ComputeZCBPrices(times, r_0, theta, sigma, k, t)
@@ -71,14 +69,14 @@ def ComputeABValues(times, coupons, r, theta, sigma, k, t):
         print("Array sizes do not match. len(times) = ",len(times),"len(coupons) = ", len(coupons))
 
 
-def f(r, coupons, A, B, K):
+def f(r, coupons, A, B):
     
     runningsum = 0
     end = len(coupons)
     for i in range(0, end):
-        runningsum += coupons[i] * A[i] * np.exp(-B[i] * r)
+        runningsum += coupons[i] * A[i] * np.exp(- B[i] * r)
     
-    return runningsum - K 
+    return float(runningsum - 1)
 
 
 def fprime(r, coupons, A, B):
@@ -86,16 +84,17 @@ def fprime(r, coupons, A, B):
     runningsum = 0
     end = len(coupons)
     for i in range(0, end):
-        runningsum += - B[i] * coupons[i] * A[i] * np.exp(-B[i] * r)
+        runningsum += - B[i] * coupons[i] * A[i] * np.exp(- B[i] * r)
         
-    return runningsum
+    return float(runningsum)
 
 
 def JamshidiansTrick(f, r0, fprime):
     
-    rstar = scipy.optimize.newton(f, r0, fprime)
-    
+    rstar = newton(f, r0, fprime)
+     
     return rstar
+
 
 #we write a function to calculate the zero coupon bond prices at t of zero coupon bonds with 
 #maturities at each of our payment dates
@@ -121,16 +120,38 @@ def ComputeStrikePrices(times, rstar, theta, sigma, k, T):
         strikeprices.append(K)
         
     return strikeprices
+
+def ComputeSwaptionIntrinsicValue(cp, times, coupons, r, theta, sigma, k, t):
+    """
+    Computes the intrinsic value of a swaption at expiry.
+
+    Parameters:
+        cp      : 1 for payer, -1 for receiver
+        times   : list of payment dates
+        coupons : fixed leg cash flows
+        r       : short rate at expiry
+        theta, sigma, k : Vasicek parameters
+        t       : current time (i.e., expiry)
+
+    Returns:
+        float: payoff at expiry
+    """
+   
+    
+    PV_fixed = ComputeSwapPV(times, coupons, r, theta, sigma, k, t)
+    PV_float = ComputeSwapPV(times, np.ones_like(coupons), r, theta, sigma, k, t)
+    
+    return max(cp * (PV_fixed - PV_float), 0)
             
 
 def ComputeEuropeanSwaptionPrice(cp, times, coupons, r_0, theta, sigma, k, T, t): 
     
     ZCBprices_atT = ComputeZCBPrices(times, r_0, theta, sigma, k, T)
     Avalues, Bvalues = ComputeABValues(times, coupons, r_0, theta, sigma, k, t) 
-    swapPV = ComputeSwapPV(times, coupons, r_0, theta, sigma, k, 0) 
+    #swapPV = ComputeSwapPV(times, coupons, r_0, theta, sigma, k, 0) 
     
     def f1(r):
-        return f(r, coupons, Avalues, Bvalues, swapPV)
+        return f(r, coupons, Avalues, Bvalues)
     def fprime1(r):
         return fprime(r, coupons, Avalues, Bvalues)
 
@@ -188,15 +209,26 @@ def ComputeTargetContValues(cp, nr, n, times, coupons, r_0, theta, sigma, k, T, 
     
     TargetContVal = np.zeros((nr, n+1))
     
+    
+    
     for i in range(nr):
-        TargetContVal[i, -1] = ComputeEuropeanSwaptionPrice(cp, times, coupons, r_val[i, -1], theta, sigma, k, T, T)
+        
+        shiftedtimes = []
+        for t_i in times:
+            t_i = t_i + T
+            shiftedtimes.append(t_i)
+            
+        #TargetContVal[i, -1] = ComputeEuropeanSwaptionPrice(cp, shiftedtimes, coupons, r_val[i, -1], theta, sigma, k, T, T)
+        TargetContVal[i, -1] = ComputeSwaptionIntrinsicValue(cp, shiftedtimes, coupons, r_val[i, -1], theta, sigma, k, T)
+
+    
     
     for i in range(nr):
         for j in range(n-1,0,-1):
             TargetContVal[i,j] = np.exp(- r_val[i,j] * dt) * TargetContVal[i,j+1] 
     
     return TargetContVal
-             
+           
             
 def ComputeEarlyExerciseValues(cp, nr, n, times, coupons, r_0, theta, sigma, k, T, t):
     
@@ -207,12 +239,19 @@ def ComputeEarlyExerciseValues(cp, nr, n, times, coupons, r_0, theta, sigma, k, 
     EarlyExerciseVal = np.zeros((nr, n+1))
     
     for i in range(nr):
-        EarlyExerciseVal[i, -1] = ComputeEuropeanSwaptionPrice(cp, times, coupons, r_val[i, -1], theta, sigma, k, T, T)
+        #EarlyExerciseVal[i, -1] = ComputeEuropeanSwaptionPrice(cp, times, coupons, r_val[i, -1], theta, sigma, k, T, T)
+        EarlyExerciseVal[i, -1] = ComputeSwaptionIntrinsicValue(cp, times, coupons, r_val[i, -1], theta, sigma, k, T)
 
     for i in range(nr):
         for j in range(n-1,0,-1):
             currenttime = j * dt
-            EarlyExerciseVal[i,j] = ComputeEuropeanSwaptionPrice(cp, times, coupons, r_val[i,j], theta, sigma, k, T, currenttime) 
+            
+            shiftedtimes = []
+            for t_i in times:
+                t_i = t_i + currenttime
+                shiftedtimes.append(t_i)
+          
+            EarlyExerciseVal[i, j] = ComputeEuropeanSwaptionPrice(cp, shiftedtimes, coupons, r_val[i, j], theta, sigma, k, T, currenttime)
         
     return EarlyExerciseVal
 
@@ -271,7 +310,7 @@ def ComputeLLSContValue(cp, nr, n, times, coupons, r_0, theta, sigma, k, T, t, e
             
         else:
             LLSContVal[:, j] = 0                
-            print("This path is not ITM.")
+            #print("This path is not ITM.")
                  
     return LLSContVal                  
 
@@ -304,7 +343,6 @@ def ComputeBermudanSwaptionPrice(cp, nr, n, times, coupons, r_0, theta, sigma, k
     std = np.std(BermudanOptionVal[:,0])
     
     return price, std
-
 
 
 if __name__ == '__main__':

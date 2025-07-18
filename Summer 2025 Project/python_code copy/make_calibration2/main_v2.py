@@ -520,7 +520,7 @@ def set_mkt_price_df(df_swp_data, shift_data, rf_curve_dict):
         df_swp_data_n.at[i, 'PRICE']     = price_tmp
         df_swp_data_n.at[i, 'SHIFT']     = shift_tmp
         df_swp_data_n.at[i, 'ZC_PRICE']  = zc_price_tmp
-        df_swp_data_n.at[i, 'ZC_RATE']   = zc_rate_tmp
+        df_swp_data_n.at[i, 'ZC_RATE']   = zc_rate_tmp 
 
     return  df_swp_data_n
 
