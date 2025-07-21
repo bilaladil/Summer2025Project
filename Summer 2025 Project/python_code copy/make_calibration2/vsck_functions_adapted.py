@@ -23,12 +23,14 @@ def ZCB_price(r, theta, sigma, k, T, t):
     B = (1 / k)*(1 - np.exp((-k) * (T - t)))
     A = np.exp((theta - ((sigma ** 2) / (2 * (k ** 2))) ) * (B - T + t) - ((sigma ** 2) / (4 * k)) * (B ** 2))
     
-    P = A * np.exp(- B * r)
+    P = A * np.exp(- B * r) # (Equation 3.39)
     return A, B, P
 
- 
-#we want to use Jamshidians trick to find rstar when sum of ci * ZCB price = K
 
+#we want to use Jamshidians trick to find rstar when sum of ci * ZCB price = 1
+#(PV fixed = PV floating, but we let PV floating = 1)
+
+#this function computes the PV of the fixed leg of the swap
 def ComputeSwapPV(times, coupons, r_0, theta, sigma, k, t):
     
     ZCBprices = ComputeZCBPrices(times, r_0, theta, sigma, k, t)
@@ -47,7 +49,7 @@ def ComputeSwapPV(times, coupons, r_0, theta, sigma, k, t):
         print("Array sizes do not match. len(times) = ",len(times),"len(coupons) = ", len(coupons))
 
 #we find the A and B values under the Vasicek model at all payment dates.
-#these are important because they are needed for f and fprime       
+#these are important because they are needed as inputs for f and fprime to find rstar using Jamshidians      
 def ComputeABValues(times, coupons, r, theta, sigma, k, t):
     
     if len(times) == len(coupons):
@@ -69,6 +71,8 @@ def ComputeABValues(times, coupons, r, theta, sigma, k, t):
         print("Array sizes do not match. len(times) = ",len(times),"len(coupons) = ", len(coupons))
 
 
+#(PVfixed = PVfloating becomes PVfixed - PVfloating = 0 or PVfixed - 1 = 0 and for Jamshidians we want to solve
+#this for rstar)
 def f(r, coupons, A, B):
     
     runningsum = 0
@@ -76,9 +80,9 @@ def f(r, coupons, A, B):
     for i in range(0, end):
         runningsum += coupons[i] * A[i] * np.exp(- B[i] * r)
     
-    return float(runningsum - 1)
+    return float(runningsum - 1) 
 
-
+#derivative of above
 def fprime(r, coupons, A, B):
     
     runningsum = 0
@@ -88,7 +92,7 @@ def fprime(r, coupons, A, B):
         
     return float(runningsum)
 
-
+#value of r when PVfixed - 1 = 0
 def JamshidiansTrick(f, r0, fprime):
     
     rstar = newton(f, r0, fprime)
@@ -121,6 +125,9 @@ def ComputeStrikePrices(times, rstar, theta, sigma, k, T):
         
     return strikeprices
 
+#ChatGPT suggested doing this for opion expiry (when t = T) because we know the value r and we cant use
+#Jamshidians because T - t becomes 0
+#I didnt write any of this function, I took it straight from chatgpt
 def ComputeSwaptionIntrinsicValue(cp, times, coupons, r, theta, sigma, k, t):
     """
     Computes the intrinsic value of a swaption at expiry.
@@ -146,8 +153,10 @@ def ComputeSwaptionIntrinsicValue(cp, times, coupons, r, theta, sigma, k, t):
 
 def ComputeEuropeanSwaptionPrice(cp, times, coupons, r_0, theta, sigma, k, T, t): 
     
-    ZCBprices_atT = ComputeZCBPrices(times, r_0, theta, sigma, k, T)
-    Avalues, Bvalues = ComputeABValues(times, coupons, r_0, theta, sigma, k, t) 
+    ZCBprices_atT = ComputeZCBPrices(times, r_0, theta, sigma, k, T) #computing ZCB prices at expiry
+    Avalues, Bvalues = ComputeABValues(times, coupons, r_0, theta, sigma, k, t)  #getting A and B values to use
+    #for Jamshidians 
+    
     #swapPV = ComputeSwapPV(times, coupons, r_0, theta, sigma, k, 0) 
     
     def f1(r):
@@ -155,15 +164,16 @@ def ComputeEuropeanSwaptionPrice(cp, times, coupons, r_0, theta, sigma, k, T, t)
     def fprime1(r):
         return fprime(r, coupons, Avalues, Bvalues)
 
-    rstar = JamshidiansTrick(f1, r_0, fprime1)
+    rstar = JamshidiansTrick(f1, r_0, fprime1) #finding rstar 
 
-    strikeprices = ComputeStrikePrices(times, rstar, theta, sigma, k, T)
+    strikeprices = ComputeStrikePrices(times, rstar, theta, sigma, k, T) #computing strike prices using rstar
 
     if len(coupons) == len(times):
         
         n = len(coupons)    
         runningsum = 0
         
+        #calculating swaption payoffs
         if cp == 1: #payer
             for i in range(0,n):
                 runningsum += coupons[i] * max(ZCBprices_atT[i] - strikeprices[i] , 0)
@@ -200,7 +210,7 @@ def VasicekShortRateSimulations(nr, n, r_0, theta, sigma, k, T, t):
             
     return r_val
 
-
+#we compute target continuation values using backwards discounting that we will aim to hit using Linear Least Squares
 def ComputeTargetContValues(cp, nr, n, times, coupons, r_0, theta, sigma, k, T, t):
     
     dt = (T - t)/n
@@ -209,27 +219,27 @@ def ComputeTargetContValues(cp, nr, n, times, coupons, r_0, theta, sigma, k, T, 
     
     TargetContVal = np.zeros((nr, n+1))
     
-    
-    
     for i in range(nr):
         
         shiftedtimes = []
         for t_i in times:
             t_i = t_i + T
             shiftedtimes.append(t_i)
-            
+        
+        #ChatGPT suggesting to use the IntrinsicValue calculations at expiry
         #TargetContVal[i, -1] = ComputeEuropeanSwaptionPrice(cp, shiftedtimes, coupons, r_val[i, -1], theta, sigma, k, T, T)
         TargetContVal[i, -1] = ComputeSwaptionIntrinsicValue(cp, shiftedtimes, coupons, r_val[i, -1], theta, sigma, k, T)
-
     
     
+    #backward discounting for the other steps
     for i in range(nr):
         for j in range(n-1,0,-1):
             TargetContVal[i,j] = np.exp(- r_val[i,j] * dt) * TargetContVal[i,j+1] 
     
     return TargetContVal
            
-            
+
+#computing early exercise values at each time point to see if it is optimal at any point
 def ComputeEarlyExerciseValues(cp, nr, n, times, coupons, r_0, theta, sigma, k, T, t):
     
     dt = (T - t)/n
@@ -255,7 +265,7 @@ def ComputeEarlyExerciseValues(cp, nr, n, times, coupons, r_0, theta, sigma, k, 
         
     return EarlyExerciseVal
 
-
+#computing swap rates at every exercise date to check if swaptions are ITM
 def ComputeSwapRates(times, coupons, r_0, theta, sigma, k, t, exercisedates, lifetime):
     #swap rate = present value of floating leg / present value of fixed leg
     swaprates = []
@@ -268,8 +278,10 @@ def ComputeSwapRates(times, coupons, r_0, theta, sigma, k, t, exercisedates, lif
             t_i = t_i + e
             shiftedtimes.append(t_i)
         
+        #PVfixed
         fixedleg = ComputeSwapPV(shiftedtimes, coupons, r_0, theta, sigma, k, e)
         
+        #PVfloating
         ZCBstart = ZCB_price(r_0, theta, sigma, k, e, t)[2]
         ZCBend = ZCB_price(r_0, theta, sigma, k, (e + lifetime), t)[2]
         
@@ -281,6 +293,7 @@ def ComputeSwapRates(times, coupons, r_0, theta, sigma, k, t, exercisedates, lif
     return swaprates
 
 
+#Using linear least squares regression to calculate the continuation values for ITM paths
 def ComputeLLSContValue(cp, nr, n, times, coupons, r_0, theta, sigma, k, T, t, exercisedates, lifetime):
 
     r_val = VasicekShortRateSimulations(nr, n, r_0, theta, sigma, k, T, t)
@@ -292,23 +305,23 @@ def ComputeLLSContValue(cp, nr, n, times, coupons, r_0, theta, sigma, k, T, t, e
     for j in range(n-1, 0, -1):
         if cp == 1: #payer
            
-            itmpaths = r_val[:, j] > swaprates[j]
+            itmpaths = r_val[:, j] > swaprates[j] #payer ITM when short rate > swap rate
             
             xvals = r_val[itmpaths, j]
             yvals = TargetContVal[itmpaths, j]
                         
         elif cp == -1: #receiver
     
-            itmpaths = r_val[:, j] < swaprates[j]
+            itmpaths = r_val[:, j] < swaprates[j] #rceiver ITM when short rate < swap rate
             
             xvals = r_val[itmpaths, j]
             yvals = TargetContVal[itmpaths, j] 
         
-        if len(xvals) > 0:
+        if len(xvals) > 0: #checking if any ITM values so it only does calculations for ITM paths
             coefficients = np.polyfit(xvals, yvals, 2)
             LLSContVal[itmpaths, j] = np.maximum(0, np.polyval(coefficients, r_val[itmpaths, j]))
             
-        else:
+        else: #if no ITM values
             LLSContVal[:, j] = 0                
             #print("This path is not ITM.")
                  
@@ -329,13 +342,16 @@ def ComputeBermudanSwaptionPrice(cp, nr, n, times, coupons, r_0, theta, sigma, k
     
     for i in range(nr):
          for j in range(n-1,0,-1):
+             #if early exercise is optimal then that value becomes the option value and all subsequent values on that path are 0
              if EarlyExerciseVal[i,j] > LLSContVal[i,j]:
                  BermudanOptionVal[i,j] = EarlyExerciseVal[i,j]
                  BermudanOptionVal[i,j+1:] = 0 
-                 
+             
+            #continuation if not early exercised
              elif LLSContVal[i,j] >= EarlyExerciseVal[i,j]:
                  BermudanOptionVal[i,j] = LLSContVal[i,j]
-                 
+         
+        #discounting back to t = 0 using simulated short rate
          BermudanOptionVal[i,0] = np.exp(- r_val[i,0] * dt) * BermudanOptionVal[i,1] 
     
     
