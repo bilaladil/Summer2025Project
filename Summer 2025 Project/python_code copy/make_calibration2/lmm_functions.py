@@ -4,15 +4,13 @@ from scipy.stats import norm, ncx2
 import sys
 
 
-
-
-
 def FQ(label):
     print ('------------- FIN QUI TUTTO OK  %s ----------' %(label))
     sys.exit()
 
 
-
+#this function calculates the discount factor at p_time by interpolating between the risk free interest rates
+#(rf_values) at specific times (rf_times)
 def Pt_MKT(p_time, rf_times, rf_values):
 
     RateTime = np.interp(p_time, rf_times, rf_values)
@@ -61,22 +59,32 @@ def CurveFromDictToList(rf_Curve):
 #   LMM su Swaptions
 #################################################
 
+
+#building the instantaneous correlation matrix for forward LIBOR rates
+#the instantaneous correlation is the correlation between the increments of two brownian motions on forward rates
+#with different maturities. So we create a matrix to view how the randomness of forward arates affect one another.
+#The correlation will affect the covariance structure of lIBOR rates and subsequently affect pricing of derivatives
+#Section 6.6 and 6.9 from Brigo and Mercurio
 def LMM_correlation_matrix(param, times):
 
-	beta = float(param[4])
-	rho  = float(param[5])
+	beta = float(param[4]) #decay rate
+	rho  = float(param[5]) #long run correlation
 
 	T_t = times[:, None] - times
 
 	return rho + (1. - rho) * np.exp(- beta * np.absolute(T_t))
 
+
+#computing the closed form integral of product of volatilities 
 def LMM_IntVol_jk_dt(param, t0, t1, t_k, t_j):
-	# integrale in forma analitica della volatilita'
+	# Analytical integral of volatility
 
-	# il metodo ha senso solo per t_j e t_k maggiore uguale di t_exp
-	#if np.any(np.logical_or(t_j < t_exp, t_k < t_exp)):
-	#    raise Exception("I tempi nell'integrale in forma chiusa sono errati")
+    # The method only makes sense for t_j and t_k greater than or equal to t_exp
+    # if np.any(np.logical_or(t_j < t_exp, t_k < t_exp)):
+    # raise Exception("The times in the closed-form integral are incorrect")
 
+
+    #volatility parameters
 	a = float(param[0])
 	b = float(param[1])
 	c = float(param[2])
@@ -114,6 +122,7 @@ def LMM_IntVol_jk_dt(param, t0, t1, t_k, t_j):
 
 	res = tmp00 * tmp01 * (tmp1 + tmp2 + tmp3)
 
+    #making sure that t_j and t_k are not less than t_exp
 	if type(res) == np.ndarray:
 		res[np.logical_or((t_k - t0) < 0., (t_j - t0) < 0.)] = 0.
 	else:
@@ -122,49 +131,59 @@ def LMM_IntVol_jk_dt(param, t0, t1, t_k, t_j):
 
 	return res
 
+#Using Rebonato's approximation to find the Black implied volatility of swaptions
 def LMM_vola_swaptions_Rebonato(param, curve, shift, swap_rate, t_exp, maturity_swap, tenor_swap):
 
-	# tempi di riferimento dello swap
-	# t_exp + tenor_swap, .... , t_maturity compresi gli estremi
-	# non e' incluso t_exp
+	# Swap reference times
+    # t_exp + tenor_swap, .... , t_maturity including the extremes
+    # t_exp is not included
 	tmp_time = np.arange(0., maturity_swap, tenor_swap) + tenor_swap + t_exp
-	# sigma_k si riferisce a T_{k-1}
+    
+	# sigma_k refers to T_{k-1}
+    #forward rate maturities or dates to calculate volatilities at
 	tmp_time_vola = tmp_time - tenor_swap
 
-	# Calcolo i fattori di sconto
+	# Calculate discount factors
 	#df = np.exp(- tmp_time * np.interp(tmp_time, curve['TIME'], np.log(curve['VALUE'])))
 	#df_prec = np.exp( - tmp_time_vola * np.interp(tmp_time_vola, curve['TIME'], np.log(curve['VALUE'])))
 	#df = np.exp(np.interp(tmp_time, curve[0], np.log(curve[1])))
 	df = np.exp(np.interp(tmp_time, curve['TIME'], np.log(curve['DISCOUNT'])))
 	df_prec = np.exp(np.interp(tmp_time_vola, curve['TIME'], np.log(curve['DISCOUNT'])))
 
-	# tassi Libor iniziali
+	# initial Libor rates
 	Forward0 = (df_prec/df - 1.) / tenor_swap
 
 	#print('Forward0: ', Forward0)
 	#idx_exp = 0
 	#idx_mat = self.idx_tenors[t_maturity] - 1
 
-	# dal successivo di t_exp al t_maturity compreso
+	# from the next of t_exp to t_maturity inclusive
 	#idx = np.arange((idx_exp+1), (idx_mat + 1), 1)
+    #computing swap rates to use in Rebonato's formula
 	w_denom = (tenor_swap * df)
 	w_0 = (tenor_swap * df) / w_denom.sum()
 
 	#idx_vola = idx - 1
 	# formula di Rebonato
+    #computing the closed form integral of product of volatilities 
 	s_t_jk = LMM_IntVol_jk_dt(param = param, t0 = 0., t1=t_exp, t_k=tmp_time_vola[:, None], t_j=tmp_time_vola)
+    #computing covariance matrix
 	cov = LMM_correlation_matrix(param= param, times=tmp_time) * s_t_jk
 
 	#shift = shift/100.0
+    #weighted LIBOR rates wrt shift
 	tmp = (w_0 * (Forward0 + shift))
 
 	#print('swap_rate: ', swap_rate)
 	#print('shift: ', shift)
+    #shifting the swap rate as well
 	swap = swap_rate + shift
 	#FQ(77)
+    
+    #computing the variance with the core idea from Rebonatos formula
 	var_estimated = np.dot(tmp, np.dot(cov, tmp.transpose())) / (swap * swap * t_exp)
 
-	return np.sqrt(var_estimated)
+	return np.sqrt(var_estimated) 
 
 def loss_LMM_swaptions(list_model_params, curve, mkt_prices, tenor_data,call_type, power, absrel):
 
