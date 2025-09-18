@@ -311,7 +311,7 @@ def set_mdl_calib_results(df_swp_data, rf_curve_dict, mdl_flag, shift_ref, mdl_p
     return  df_swp_data_n, x2_out
 
 
-#this function calibrates the model paramaters so that model prices match market prices as closely as 
+#this function calibrates the model parameters so that model prices match market prices as closely as 
 #possible
 def model_calibration(mkt_prices_dict, rf_curve_dict, mdl_label_tmp, prm_data_dict, shift_ref):
 
